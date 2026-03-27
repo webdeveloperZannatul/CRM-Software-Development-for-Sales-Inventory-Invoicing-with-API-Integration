@@ -1,0 +1,1414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRM Pro - Sales, Inventory & Invoicing</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+        .sidebar { transition: all 0.3s ease; }
+        .sidebar.collapsed { width: 80px; }
+        .main-content { transition: all 0.3s ease; }
+        .card { transition: all 0.3s ease; }
+        .card:hover { transform: translateY(-2px); box-shadow: 0 10px 20px rgba(0,0,0,0.1); }
+        .btn { transition: all 0.2s ease; }
+        .btn:hover { transform: translateY(-1px); }
+        .modal { display: none; animation: fadeIn 0.3s ease; }
+        .modal.active { display: flex; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .notification { animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        .pipeline-stage { min-height: 400px; }
+        .deal-card { cursor: move; transition: all 0.2s ease; }
+        .deal-card:hover { transform: scale(1.02); }
+        .low-stock { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .barcode-scanner { position: relative; overflow: hidden; }
+        .scanner-line { animation: scan 2s linear infinite; }
+        @keyframes scan { 0% { top: 0; } 100% { top: 100%; } }
+        .invoice-preview { background: white; padding: 30px; }
+        @media print { .no-print { display: none; } }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Login Screen -->
+    <div id="loginScreen" class="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-700">
+        <div class="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+            <div class="text-center mb-8">
+                <i class="fas fa-chart-line text-5xl text-blue-600 mb-4"></i>
+                <h1 class="text-3xl font-bold text-gray-800">CRM Pro</h1>
+                <p class="text-gray-600 mt-2">Sales, Inventory & Invoicing</p>
+            </div>
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                    <input type="email" id="loginEmail" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="admin@crmpro.com" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                    <input type="password" id="loginPassword" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent" placeholder="••••••••" required>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                    <select id="loginRole" class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        <option value="admin">Administrator</option>
+                        <option value="sales">Sales Representative</option>
+                        <option value="warehouse">Warehouse Staff</option>
+                    </select>
+                </div>
+                <button type="submit" class="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-200 font-medium">
+                    Sign In
+                </button>
+            </form>
+            <div class="mt-6 text-center text-sm text-gray-600">
+                <p>Demo Credentials:</p>
+                <p>Any email + password works</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Application -->
+    <div id="mainApp" class="hidden flex h-screen">
+        <!-- Sidebar -->
+        <div id="sidebar" class="sidebar w-64 bg-gray-900 text-white flex flex-col">
+            <div class="p-4 border-b border-gray-800">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-xl font-bold flex items-center">
+                        <i class="fas fa-chart-line mr-2"></i>
+                        <span class="sidebar-text">CRM Pro</span>
+                    </h2>
+                    <button id="toggleSidebar" class="text-gray-400 hover:text-white">
+                        <i class="fas fa-bars"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <nav class="flex-1 p-4">
+                <ul class="space-y-2">
+                    <li>
+                        <a href="#" data-page="dashboard" class="nav-item flex items-center p-3 rounded-lg hover:bg-gray-800 transition">
+                            <i class="fas fa-tachometer-alt w-5"></i>
+                            <span class="ml-3 sidebar-text">Dashboard</span>
+                        </a>
+                    </li>
+                    <li class="admin-only sales-only">
+                        <a href="#" data-page="sales" class="nav-item flex items-center p-3 rounded-lg hover:bg-gray-800 transition">
+                            <i class="fas fa-handshake w-5"></i>
+                            <span class="ml-3 sidebar-text">Sales Pipeline</span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="#" data-page="inventory" class="nav-item flex items-center p-3 rounded-lg hover:bg-gray-800 transition">
+                            <i class="fas fa-boxes w-5"></i>
+                            <span class="ml-3 sidebar-text">Inventory</span>
+                        </a>
+                    </li>
+                    <li class="admin-only sales-only">
+                        <a href="#" data-page="invoices" class="nav-item flex items-center p-3 rounded-lg hover:bg-gray-800 transition">
+                            <i class="fas fa-file-invoice-dollar w-5"></i>
+                            <span class="ml-3 sidebar-text">Invoices</span>
+                        </a>
+                    </li>
+                    <li class="admin-only">
+                        <a href="#" data-page="users" class="nav-item flex items-center p-3 rounded-lg hover:bg-gray-800 transition">
+                            <i class="fas fa-users w-5"></i>
+                            <span class="ml-3 sidebar-text">User Management</span>
+                        </a>
+                    </li>
+                    <li class="admin-only">
+                        <a href="#" data-page="reports" class="nav-item flex items-center p-3 rounded-lg hover:bg-gray-800 transition">
+                            <i class="fas fa-chart-bar w-5"></i>
+                            <span class="ml-3 sidebar-text">Reports</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+            
+            <div class="p-4 border-t border-gray-800">
+                <div class="flex items-center">
+                    <img src="https://i.postimg.cc/QMp0WN79/Freelancer-Id-Card.jpg" alt="User" class="w-10 h-10 rounded-full">
+                    <div class="ml-3 sidebar-text">
+                        <p Style="color: blue;"class="text-sm font-medium" id="userName">Admin User</p>
+                        <p Style="color: blue;"class="text-xs text-gray-400" id="userRole">Administrator</p>
+                    </div>
+                </div>
+                <button id="logoutBtn" class="mt-4 w-full bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition text-sm">
+                    <i class="fas fa-sign-out-alt mr-2"></i>
+                    <span class="sidebar-text">Logout</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content flex-1 flex flex-col overflow-hidden">
+            <!-- Header -->
+            <header class="bg-white shadow-sm border-b border-gray-200 px-6 py-4">
+                <div class="flex items-center justify-between">
+                    <h1 id="pageTitle" class="text-2xl font-bold text-gray-800">Dashboard</h1>
+                    <div class="flex items-center space-x-4">
+                        <button class="relative p-2 text-gray-600 hover:text-gray-800">
+                            <i class="fas fa-bell text-xl"></i>
+                            <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full"></span>
+                        </button>
+                        <button id="addNewBtn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                            <i class="fas fa-plus mr-2"></i>
+                            <span>Add New</span>
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Page Content -->
+            <main class="flex-1 overflow-y-auto p-6" id="pageContent">
+                <!-- Dynamic content will be loaded here -->
+            </main>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div id="modalContainer"></div>
+
+    <!-- Notifications Container -->
+    <div id="notifications" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <script>
+        // Application State
+        let currentUser = null;
+        let currentPage = 'dashboard';
+        let sidebarCollapsed = false;
+
+        // Mock Database
+        const db = {
+            users: [
+                { id: 1, name: 'Admin User', email: 'ritaripon2004@gmail.com', role: 'admin', avatar: 'admin' },
+                { id: 2, name: 'John Sales', email: 'john@crmpro.com', role: 'sales', avatar: 'john' },
+                { id: 3, name: 'Mike Warehouse', email: 'mike@crmpro.com', role: 'warehouse', avatar: 'mike' }
+            ],
+            deals: [
+                { id: 1, title: 'Enterprise Software Deal', value: 50000, stage: 'proposal', customer: 'Tech Corp', rep: 'John Sales', date: '2024-01-15', probability: 75 },
+                { id: 2, title: 'Cloud Migration Project', value: 25000, stage: 'negotiation', customer: 'Data Inc', rep: 'John Sales', date: '2024-01-14', probability: 90 },
+                { id: 3, title: 'Security Audit Contract', value: 15000, stage: 'qualified', customer: 'Secure Ltd', rep: 'John Sales', date: '2024-01-13', probability: 50 }
+            ],
+            inventory: [
+                { id: 1, name: 'Laptop Pro X1', sku: 'LPX-001', quantity: 15, minStock: 10, price: 1299, category: 'Electronics', lastUpdated: '2024-01-15' },
+                { id: 2, name: 'Wireless Mouse', sku: 'WM-002', quantity: 5, minStock: 20, price: 29, category: 'Accessories', lastUpdated: '2024-01-15' },
+                { id: 3, name: 'USB-C Hub', sku: 'UCH-003', quantity: 50, minStock: 15, price: 49, category: 'Accessories', lastUpdated: '2024-01-14' },
+                { id: 4, name: 'Monitor 27"', sku: 'MON-004', quantity: 8, minStock: 10, price: 399, category: 'Electronics', lastUpdated: '2024-01-13' }
+            ],
+            invoices: [
+                { id: 'INV-001', customer: 'Tech Corp', amount: 50000, status: 'paid', date: '2024-01-10', dueDate: '2024-02-10', items: [{ name: 'Enterprise License', qty: 1, price: 50000 }] },
+                { id: 'INV-002', customer: 'Data Inc', amount: 25000, status: 'pending', date: '2024-01-12', dueDate: '2024-02-12', items: [{ name: 'Cloud Services', qty: 1, price: 25000 }] },
+                { id: 'INV-003', customer: 'Secure Ltd', amount: 15000, status: 'overdue', date: '2024-01-05', dueDate: '2024-02-05', items: [{ name: 'Security Audit', qty: 1, price: 15000 }] }
+            ]
+        };
+
+        // Initialize Application
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeApp();
+        });
+
+        function initializeApp() {
+            // Load data from localStorage if available
+            const savedData = localStorage.getItem('crmData');
+            if (savedData) {
+                Object.assign(db, JSON.parse(savedData));
+            }
+
+            // Setup event listeners
+            document.getElementById('loginForm').addEventListener('submit', handleLogin);
+            document.getElementById('logoutBtn').addEventListener('click', handleLogout);
+            document.getElementById('toggleSidebar').addEventListener('click', toggleSidebar);
+            document.getElementById('addNewBtn').addEventListener('click', handleAddNew);
+
+            // Setup navigation
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const page = e.currentTarget.dataset.page;
+                    navigateToPage(page);
+                });
+            });
+
+            // Check for saved session
+            const savedUser = sessionStorage.getItem('currentUser');
+            if (savedUser) {
+                currentUser = JSON.parse(savedUser);
+                showMainApp();
+            }
+        }
+
+        function handleLogin(e) {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            const role = document.getElementById('loginRole').value;
+
+            // Simulate authentication (accept any credentials for demo)
+            const user = {
+                id: role === 'admin' ? 1 : role === 'sales' ? 2 : 3,
+                name: role === 'admin' ? 'Admin User' : role === 'sales' ? 'John Sales' : 'Mike Warehouse',
+                email: email,
+                role: role
+            };
+
+            currentUser = user;
+            sessionStorage.setItem('currentUser', JSON.stringify(user));
+            showMainApp();
+            showNotification('Welcome back, ' + user.name + '!', 'success');
+        }
+
+        function handleLogout() {
+            currentUser = null;
+            sessionStorage.removeItem('currentUser');
+            document.getElementById('loginScreen').classList.remove('hidden');
+            document.getElementById('mainApp').classList.add('hidden');
+            showNotification('Logged out successfully', 'info');
+        }
+
+        function showMainApp() {
+            document.getElementById('loginScreen').classList.add('hidden');
+            document.getElementById('mainApp').classList.remove('hidden');
+            
+            // Update user info
+            document.getElementById('userName').textContent = currentUser.name;
+            document.getElementById('userRole').textContent = currentUser.role.charAt(0).toUpperCase() + currentUser.role.slice(1);
+            
+            // Apply role-based visibility
+            applyRolePermissions();
+            
+            // Load default page
+            navigateToPage('dashboard');
+        }
+
+        function applyRolePermissions() {
+            const adminOnly = document.querySelectorAll('.admin-only');
+            const salesOnly = document.querySelectorAll('.sales-only');
+            
+            if (currentUser.role !== 'admin') {
+                adminOnly.forEach(el => el.style.display = 'none');
+            } else {
+                adminOnly.forEach(el => el.style.display = 'block');
+            }
+            
+            if (currentUser.role !== 'admin' && currentUser.role !== 'sales') {
+                salesOnly.forEach(el => el.style.display = 'none');
+            } else {
+                salesOnly.forEach(el => el.style.display = 'block');
+            }
+        }
+
+        function toggleSidebar() {
+            sidebarCollapsed = !sidebarCollapsed;
+            const sidebar = document.getElementById('sidebar');
+            const sidebarTexts = document.querySelectorAll('.sidebar-text');
+            
+            if (sidebarCollapsed) {
+                sidebar.classList.add('collapsed');
+                sidebarTexts.forEach(text => text.style.display = 'none');
+            } else {
+                sidebar.classList.remove('collapsed');
+                setTimeout(() => {
+                    sidebarTexts.forEach(text => text.style.display = 'inline');
+                }, 150);
+            }
+        }
+
+        function navigateToPage(page) {
+            currentPage = page;
+            document.getElementById('pageTitle').textContent = page.charAt(0).toUpperCase() + page.slice(1);
+            
+            // Update active nav
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('bg-gray-800');
+                if (item.dataset.page === page) {
+                    item.classList.add('bg-gray-800');
+                }
+            });
+            
+            // Load page content
+            const content = document.getElementById('pageContent');
+            switch(page) {
+                case 'dashboard':
+                    content.innerHTML = getDashboardHTML();
+                    setTimeout(() => initializeDashboard(), 100);
+                    break;
+                case 'sales':
+                    content.innerHTML = getSalesHTML();
+                    setTimeout(() => initializeSalesPipeline(), 100);
+                    break;
+                case 'inventory':
+                    content.innerHTML = getInventoryHTML();
+                    setTimeout(() => initializeInventory(), 100);
+                    break;
+                case 'invoices':
+                    content.innerHTML = getInvoicesHTML();
+                    setTimeout(() => initializeInvoices(), 100);
+                    break;
+                case 'users':
+                    content.innerHTML = getUsersHTML();
+                    setTimeout(() => initializeUsers(), 100);
+                    break;
+                case 'reports':
+                    content.innerHTML = getReportsHTML();
+                    setTimeout(() => initializeReports(), 100);
+                    break;
+            }
+        }
+
+        function getDashboardHTML() {
+            const totalSales = db.deals.reduce((sum, deal) => sum + deal.value, 0);
+            const lowStockItems = db.inventory.filter(item => item.quantity < item.minStock).length;
+            const pendingInvoices = db.invoices.filter(inv => inv.status === 'pending').length;
+            
+            return `
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
+                    <div class="card bg-white rounded-lg shadow p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-600">Total Sales</p>
+                                <p class="text-2xl font-bold text-gray-800">$${totalSales.toLocaleString()}</p>
+                                <p class="text-xs text-green-600 mt-1">+12% from last month</p>
+                            </div>
+                            <div class="bg-blue-100 p-3 rounded-full">
+                                <i class="fas fa-dollar-sign text-blue-600 text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card bg-white rounded-lg shadow p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-600">Active Deals</p>
+                                <p class="text-2xl font-bold text-gray-800">${db.deals.length}</p>
+                                <p class="text-xs text-gray-500 mt-1">3 in negotiation</p>
+                            </div>
+                            <div class="bg-green-100 p-3 rounded-full">
+                                <i class="fas fa-handshake text-green-600 text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card bg-white rounded-lg shadow p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-600">Low Stock Items</p>
+                                <p class="text-2xl font-bold text-gray-800 ${lowStockItems > 0 ? 'text-red-600' : ''}">${lowStockItems}</p>
+                                <p class="text-xs text-red-600 mt-1">Needs attention</p>
+                            </div>
+                            <div class="bg-red-100 p-3 rounded-full">
+                                <i class="fas fa-exclamation-triangle text-red-600 text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="card bg-white rounded-lg shadow p-6">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-600">Pending Invoices</p>
+                                <p class="text-2xl font-bold text-gray-800">${pendingInvoices}</p>
+                                <p class="text-xs text-gray-500 mt-1">1 overdue</p>
+                            </div>
+                            <div class="bg-yellow-100 p-3 rounded-full">
+                                <i class="fas fa-file-invoice text-yellow-600 text-xl"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold mb-4">Sales Pipeline</h3>
+                        <canvas id="pipelineChart"></canvas>
+                    </div>
+                    
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold mb-4">Revenue Trend</h3>
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="mt-6 bg-white rounded-lg shadow p-6">
+                    <h3 class="text-lg font-semibold mb-4">Recent Activities</h3>
+                    <div class="space-y-3">
+                        <div class="flex items-center p-3 hover:bg-gray-50 rounded-lg">
+                            <div class="bg-blue-100 p-2 rounded-full mr-3">
+                                <i class="fas fa-plus text-blue-600 text-sm"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium">New deal created: Enterprise Software Deal</p>
+                                <p class="text-xs text-gray-500">2 hours ago</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center p-3 hover:bg-gray-50 rounded-lg">
+                            <div class="bg-green-100 p-2 rounded-full mr-3">
+                                <i class="fas fa-check text-green-600 text-sm"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium">Invoice INV-001 paid</p>
+                                <p class="text-xs text-gray-500">5 hours ago</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center p-3 hover:bg-gray-50 rounded-lg">
+                            <div class="bg-red-100 p-2 rounded-full mr-3">
+                                <i class="fas fa-exclamation text-red-600 text-sm"></i>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-medium">Low stock alert: Wireless Mouse</p>
+                                <p class="text-xs text-gray-500">1 day ago</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function getSalesHTML() {
+            const stages = ['lead', 'qualified', 'proposal', 'negotiation', 'closed'];
+            return `
+                <div class="mb-6 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-bold">Sales Pipeline</h2>
+                        <p class="text-gray-600">Manage your deals and opportunities</p>
+                    </div>
+                    <button onclick="openDealModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                        <i class="fas fa-plus mr-2"></i>New Deal
+                    </button>
+                </div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-5 gap-4 overflow-x-auto">
+                    ${stages.map(stage => `
+                        <div class="bg-gray-100 rounded-lg p-4">
+                            <h3 class="font-semibold mb-3 capitalize">${stage}</h3>
+                            <div class="pipeline-stage space-y-2" data-stage="${stage}">
+                                ${db.deals.filter(deal => deal.stage === stage).map(deal => `
+                                    <div class="deal-card bg-white p-3 rounded-lg shadow-sm" draggable="true" data-deal-id="${deal.id}">
+                                        <h4 class="font-medium text-sm">${deal.title}</h4>
+                                        <p class="text-xs text-gray-600 mt-1">${deal.customer}</p>
+                                        <p class="text-lg font-bold text-blue-600 mt-2">$${deal.value.toLocaleString()}</p>
+                                        <div class="flex justify-between items-center mt-2">
+                                            <span class="text-xs text-gray-500">${deal.probability}%</span>
+                                            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">${deal.rep.split(' ')[0]}</span>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+
+        function getInventoryHTML() {
+            return `
+                <div class="mb-6 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-bold">Inventory Management</h2>
+                        <p class="text-gray-600">Track and manage your stock</p>
+                    </div>
+                    <div class="flex space-x-2">
+                        <button onclick="openBarcodeScanner()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition">
+                            <i class="fas fa-barcode mr-2"></i>Scan Barcode
+                        </button>
+                        <button onclick="openInventoryModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                            <i class="fas fa-plus mr-2"></i>Add Item
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Product</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">SKU</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stock</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Min Stock</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            ${db.inventory.map(item => `
+                                <tr class="${item.quantity < item.minStock ? 'bg-red-50 low-stock' : ''}">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-medium text-gray-900">${item.name}</div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.sku}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="text-sm font-medium ${item.quantity < item.minStock ? 'text-red-600' : 'text-gray-900'}">${item.quantity}</span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.minStock}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$${item.price}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.category}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button onclick="adjustStock(${item.id})" class="text-blue-600 hover:text-blue-900 mr-3">Adjust</button>
+                                        <button onclick="editInventoryItem(${item.id})" class="text-green-600 hover:text-green-900">Edit</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function getInvoicesHTML() {
+            return `
+                <div class="mb-6 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-bold">Invoices</h2>
+                        <p class="text-gray-600">Manage customer invoices and payments</p>
+                    </div>
+                    <button onclick="openInvoiceModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                        <i class="fas fa-plus mr-2"></i>Create Invoice
+                    </button>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Invoice #</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Amount</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Due Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            ${db.invoices.map(invoice => `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${invoice.id}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">${invoice.customer}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">$${invoice.amount.toLocaleString()}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${invoice.date}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${invoice.dueDate}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full 
+                                            ${invoice.status === 'paid' ? 'bg-green-100 text-green-800' : 
+                                              invoice.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 
+                                              'bg-red-100 text-red-800'}">
+                                            ${invoice.status}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button onclick="viewInvoice('${invoice.id}')" class="text-blue-600 hover:text-blue-900 mr-3">View</button>
+                                        <button onclick="downloadInvoice('${invoice.id}')" class="text-green-600 hover:text-green-900 mr-3">Download</button>
+                                        <button onclick="editInvoice('${invoice.id}')" class="text-gray-600 hover:text-gray-900">Edit</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function getUsersHTML() {
+            return `
+                <div class="mb-6 flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-bold">User Management</h2>
+                        <p class="text-gray-600">Manage system users and permissions</p>
+                    </div>
+                    <button onclick="openUserModal()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition">
+                        <i class="fas fa-user-plus mr-2"></i>Add User
+                    </button>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Role</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody class="bg-white divide-y divide-gray-200">
+                            ${db.users.map(user => `
+                                <tr>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="flex items-center">
+                                            <img class="h-10 w-10 rounded-full" src="https://picsum.photos/seed/admin${user.avatar}/40/40" alt="">
+                                            <div class="ml-4">
+                                                <div class="text-sm font-medium text-gray-900">${user.name}</div>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${user.email}</td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-blue-100 text-blue-800">
+                                            ${user.role}
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                                            Active
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <button onclick="editUser(${user.id})" class="text-blue-600 hover:text-blue-900 mr-3">Edit</button>
+                                        <button onclick="deleteUser(${user.id})" class="text-red-600 hover:text-red-900">Delete</button>
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `;
+        }
+
+        function getReportsHTML() {
+            return `
+                <div class="mb-6">
+                    <h2 class="text-2xl font-bold">Reports & Analytics</h2>
+                    <p class="text-gray-600">Generate insights from your data</p>
+                </div>
+                
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold mb-4">Sales by Product</h3>
+                        <canvas id="salesByProductChart"></canvas>
+                    </div>
+                    
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h3 class="text-lg font-semibold mb-4">Sales by Representative</h3>
+                        <canvas id="salesByRepChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">Export Reports</h3>
+                        <div class="flex space-x-2">
+                            <select class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                                <option>Last 30 days</option>
+                                <option>Last 90 days</option>
+                                <option>This year</option>
+                                <option>Custom range</option>
+                            </select>
+                            <button onclick="exportReport('csv')" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-sm">
+                                <i class="fas fa-file-csv mr-2"></i>Export CSV
+                            </button>
+                            <button onclick="exportReport('pdf')" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition text-sm">
+                                <i class="fas fa-file-pdf mr-2"></i>Export PDF
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <h4 class="font-medium mb-2">Sales Report</h4>
+                            <p class="text-sm text-gray-600 mb-3">Comprehensive sales analysis</p>
+                            <button onclick="generateReport('sales')" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Generate →</button>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <h4 class="font-medium mb-2">Inventory Report</h4>
+                            <p class="text-sm text-gray-600 mb-3">Stock levels and movements</p>
+                            <button onclick="generateReport('inventory')" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Generate →</button>
+                        </div>
+                        <div class="border border-gray-200 rounded-lg p-4">
+                            <h4 class="font-medium mb-2">Financial Report</h4>
+                            <p class="text-sm text-gray-600 mb-3">Revenue and profit analysis</p>
+                            <button onclick="generateReport('financial')" class="text-blue-600 hover:text-blue-800 text-sm font-medium">Generate →</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function initializeDashboard() {
+            // Pipeline Chart
+            const pipelineCtx = document.getElementById('pipelineChart').getContext('2d');
+            new Chart(pipelineCtx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Lead', 'Qualified', 'Proposal', 'Negotiation', 'Closed'],
+                    datasets: [{
+                        data: [1, 1, 1, 1, 0],
+                        backgroundColor: ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+
+            // Revenue Chart
+            const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+            new Chart(revenueCtx, {
+                type: 'line',
+                data: {
+                    labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun'],
+                    datasets: [{
+                        label: 'Revenue',
+                        data: [30000, 35000, 32000, 40000, 38000, 45000],
+                        borderColor: '#3B82F6',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        tension: 0.4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return '$' + value.toLocaleString();
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initializeSalesPipeline() {
+            // Add drag and drop functionality
+            const dealCards = document.querySelectorAll('.deal-card');
+            const stages = document.querySelectorAll('.pipeline-stage');
+
+            dealCards.forEach(card => {
+                card.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('dealId', e.target.dataset.dealId);
+                    e.target.style.opacity = '0.5';
+                });
+
+                card.addEventListener('dragend', (e) => {
+                    e.target.style.opacity = '';
+                });
+            });
+
+            stages.forEach(stage => {
+                stage.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    stage.style.backgroundColor = '#E5E7EB';
+                });
+
+                stage.addEventListener('dragleave', (e) => {
+                    stage.style.backgroundColor = '';
+                });
+
+                stage.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    const dealId = e.dataTransfer.getData('dealId');
+                    const newStage = stage.dataset.stage;
+                    
+                    // Update deal stage
+                    const deal = db.deals.find(d => d.id == dealId);
+                    if (deal) {
+                        deal.stage = newStage;
+                        saveData();
+                        showNotification('Deal moved to ' + newStage, 'success');
+                        navigateToPage('sales');
+                    }
+                    
+                    stage.style.backgroundColor = '';
+                });
+            });
+        }
+
+        function initializeInventory() {
+            // Check for low stock items
+            const lowStockItems = db.inventory.filter(item => item.quantity < item.minStock);
+            if (lowStockItems.length > 0) {
+                showNotification(`${lowStockItems.length} items are low on stock!`, 'warning');
+            }
+        }
+
+        function initializeInvoices() {
+            // No special initialization needed
+        }
+
+        function initializeUsers() {
+            // No special initialization needed
+        }
+
+        function initializeReports() {
+            // Sales by Product Chart
+            const salesByProductCtx = document.getElementById('salesByProductChart').getContext('2d');
+            new Chart(salesByProductCtx, {
+                type: 'bar',
+                data: {
+                    labels: ['Laptop Pro X1', 'Wireless Mouse', 'USB-C Hub', 'Monitor 27"'],
+                    datasets: [{
+                        label: 'Sales',
+                        data: [120, 450, 280, 95],
+                        backgroundColor: '#3B82F6'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            display: false
+                        }
+                    }
+                }
+            });
+
+            // Sales by Rep Chart
+            const salesByRepCtx = document.getElementById('salesByRepChart').getContext('2d');
+            new Chart(salesByRepCtx, {
+                type: 'pie',
+                data: {
+                    labels: ['John Sales', 'Jane Smith', 'Mike Johnson'],
+                    datasets: [{
+                        data: [45000, 32000, 28000],
+                        backgroundColor: ['#3B82F6', '#10B981', '#F59E0B']
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: {
+                            position: 'bottom'
+                        }
+                    }
+                }
+            });
+        }
+
+        function handleAddNew() {
+            switch(currentPage) {
+                case 'sales':
+                    openDealModal();
+                    break;
+                case 'inventory':
+                    openInventoryModal();
+                    break;
+                case 'invoices':
+                    openInvoiceModal();
+                    break;
+                case 'users':
+                    openUserModal();
+                    break;
+                default:
+                    showNotification('Select a module to add new items', 'info');
+            }
+        }
+
+        function openDealModal() {
+            const modal = `
+                <div class="modal active fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                        <h3 class="text-xl font-bold mb-4">New Deal</h3>
+                        <form id="dealForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Deal Title</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Customer</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Value ($)</label>
+                                <input type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Stage</label>
+                                <select class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    <option value="lead">Lead</option>
+                                    <option value="qualified">Qualified</option>
+                                    <option value="proposal">Proposal</option>
+                                    <option value="negotiation">Negotiation</option>
+                                    <option value="closed">Closed</option>
+                                </select>
+                            </div>
+                            <div class="flex justify-end space-x-2 pt-4">
+                                <button type="button" onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Create Deal</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalContainer').innerHTML = modal;
+            
+            document.getElementById('dealForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const newDeal = {
+                    id: db.deals.length + 1,
+                    title: formData.get('title') || e.target[0].value,
+                    customer: formData.get('customer') || e.target[1].value,
+                    value: parseInt(formData.get('value') || e.target[2].value),
+                    stage: formData.get('stage') || e.target[3].value,
+                    rep: currentUser.name,
+                    date: new Date().toISOString().split('T')[0],
+                    probability: Math.floor(Math.random() * 100)
+                };
+                db.deals.push(newDeal);
+                saveData();
+                closeModal();
+                navigateToPage('sales');
+                showNotification('Deal created successfully', 'success');
+            });
+        }
+
+        function openInventoryModal() {
+            const modal = `
+                <div class="modal active fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                        <h3 class="text-xl font-bold mb-4">Add Inventory Item</h3>
+                        <form id="inventoryForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Product Name</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">SKU</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                                <input type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Minimum Stock</label>
+                                <input type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Price ($)</label>
+                                <input type="number" step="0.01" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div class="flex justify-end space-x-2 pt-4">
+                                <button type="button" onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Add Item</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalContainer').innerHTML = modal;
+            
+            document.getElementById('inventoryForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newItem = {
+                    id: db.inventory.length + 1,
+                    name: e.target[0].value,
+                    sku: e.target[1].value,
+                    quantity: parseInt(e.target[2].value),
+                    minStock: parseInt(e.target[3].value),
+                    price: parseFloat(e.target[4].value),
+                    category: e.target[5].value,
+                    lastUpdated: new Date().toISOString().split('T')[0]
+                };
+                db.inventory.push(newItem);
+                saveData();
+                closeModal();
+                navigateToPage('inventory');
+                showNotification('Item added successfully', 'success');
+            });
+        }
+
+        function openInvoiceModal() {
+            const modal = `
+                <div class="modal active fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <h3 class="text-xl font-bold mb-4">Create Invoice</h3>
+                        <form id="invoiceForm" class="space-y-4">
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Customer Name</label>
+                                    <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Invoice Date</label>
+                                    <input type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+                                    <input type="date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                                </div>
+                                <div>
+                                    <label class="block text-sm font-medium text-gray-700 mb-1">Tax Rate (%)</label>
+                                    <input type="number" step="0.01" value="10" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                </div>
+                            </div>
+                            
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Items</label>
+                                <div id="invoiceItems" class="space-y-2">
+                                    <div class="flex gap-2">
+                                        <input type="text" placeholder="Item description" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg">
+                                        <input type="number" placeholder="Qty" class="w-20 px-3 py-2 border border-gray-300 rounded-lg">
+                                        <input type="number" placeholder="Price" class="w-24 px-3 py-2 border border-gray-300 rounded-lg">
+                                        <button type="button" onclick="addInvoiceItem()" class="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="flex justify-end space-x-2 pt-4">
+                                <button type="button" onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Create Invoice</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalContainer').innerHTML = modal;
+            
+            document.getElementById('invoiceForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newInvoice = {
+                    id: 'INV-' + String(db.invoices.length + 1).padStart(3, '0'),
+                    customer: e.target[0].value,
+                    date: e.target[1].value,
+                    dueDate: e.target[2].value,
+                    amount: Math.floor(Math.random() * 50000) + 10000,
+                    status: 'pending',
+                    items: [{ name: 'Service', qty: 1, price: 1000 }]
+                };
+                db.invoices.push(newInvoice);
+                saveData();
+                closeModal();
+                navigateToPage('invoices');
+                showNotification('Invoice created successfully', 'success');
+            });
+        }
+
+        function openUserModal() {
+            const modal = `
+                <div class="modal active fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                        <h3 class="text-xl font-bold mb-4">Add New User</h3>
+                        <form id="userForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
+                                <input type="text" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                                <input type="email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                                <select class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    <option value="admin">Administrator</option>
+                                    <option value="sales">Sales Representative</option>
+                                    <option value="warehouse">Warehouse Staff</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                <input type="password" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div class="flex justify-end space-x-2 pt-4">
+                                <button type="button" onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Add User</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalContainer').innerHTML = modal;
+            
+            document.getElementById('userForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const newUser = {
+                    id: db.users.length + 1,
+                    name: e.target[0].value,
+                    email: e.target[1].value,
+                    role: e.target[2].value,
+                    avatar: e.target[0].value.toLowerCase().replace(' ', '')
+                };
+                db.users.push(newUser);
+                saveData();
+                closeModal();
+                navigateToPage('users');
+                showNotification('User added successfully', 'success');
+            });
+        }
+
+        function openBarcodeScanner() {
+            const modal = `
+                <div class="modal active fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                        <h3 class="text-xl font-bold mb-4">Barcode Scanner</h3>
+                        <div class="barcode-scanner bg-gray-900 h-64 rounded-lg mb-4 relative">
+                            <div class="scanner-line absolute w-full h-1 bg-green-400"></div>
+                            <div class="flex items-center justify-center h-full">
+                                <i class="fas fa-barcode text-white text-6xl opacity-50"></i>
+                            </div>
+                        </div>
+                        <p class="text-center text-gray-600 mb-4">Position barcode within the frame</p>
+                        <div class="flex justify-end space-x-2">
+                            <button type="button" onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                            <button onclick="simulateBarcodeScan()" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">Simulate Scan</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalContainer').innerHTML = modal;
+        }
+
+        function simulateBarcodeScan() {
+            const randomItem = db.inventory[Math.floor(Math.random() * db.inventory.length)];
+            closeModal();
+            showNotification(`Scanned: ${randomItem.name} (SKU: ${randomItem.sku})`, 'success');
+            adjustStock(randomItem.id);
+        }
+
+        function adjustStock(itemId) {
+            const item = db.inventory.find(i => i.id === itemId);
+            if (!item) return;
+            
+            const modal = `
+                <div class="modal active fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-6 w-full max-w-md">
+                        <h3 class="text-xl font-bold mb-4">Adjust Stock - ${item.name}</h3>
+                        <p class="text-gray-600 mb-4">Current stock: ${item.quantity}</p>
+                        <form id="stockForm" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Adjustment Type</label>
+                                <select id="adjustmentType" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                                    <option value="add">Add Stock</option>
+                                    <option value="remove">Remove Stock</option>
+                                    <option value="set">Set Exact Quantity</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Quantity</label>
+                                <input type="number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-700 mb-1">Reason</label>
+                                <textarea class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" rows="3"></textarea>
+                            </div>
+                            <div class="flex justify-end space-x-2 pt-4">
+                                <button type="button" onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Cancel</button>
+                                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">Update Stock</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalContainer').innerHTML = modal;
+            
+            document.getElementById('stockForm').addEventListener('submit', (e) => {
+                e.preventDefault();
+                const type = document.getElementById('adjustmentType').value;
+                const quantity = parseInt(e.target[1].value);
+                
+                if (type === 'add') {
+                    item.quantity += quantity;
+                } else if (type === 'remove') {
+                    item.quantity = Math.max(0, item.quantity - quantity);
+                } else {
+                    item.quantity = quantity;
+                }
+                
+                item.lastUpdated = new Date().toISOString().split('T')[0];
+                saveData();
+                closeModal();
+                navigateToPage('inventory');
+                showNotification('Stock updated successfully', 'success');
+            });
+        }
+
+        function viewInvoice(invoiceId) {
+            const invoice = db.invoices.find(inv => inv.id === invoiceId);
+            if (!invoice) return;
+            
+            const modal = `
+                <div class="modal active fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div class="bg-white rounded-lg p-8 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div class="invoice-preview">
+                            <div class="flex justify-between items-start mb-8">
+                                <div>
+                                    <h2 class="text-2xl font-bold">INVOICE</h2>
+                                    <p class="text-gray-600">${invoice.id}</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="font-semibold">CRM Pro</p>
+                                    <p class="text-sm text-gray-600">123 Business St</p>
+                                    <p class="text-sm text-gray-600">City, State 12345</p>
+                                </div>
+                            </div>
+                            
+                            <div class="grid grid-cols-2 gap-8 mb-8">
+                                <div>
+                                    <p class="text-sm text-gray-600 mb-1">Bill To:</p>
+                                    <p class="font-semibold">${invoice.customer}</p>
+                                    <p class="text-sm text-gray-600">Customer Address</p>
+                                </div>
+                                <div class="text-right">
+                                    <p class="text-sm text-gray-600 mb-1">Invoice Date:</p>
+                                    <p class="font-semibold">${invoice.date}</p>
+                                    <p class="text-sm text-gray-600 mt-2">Due Date:</p>
+                                    <p class="font-semibold">${invoice.dueDate}</p>
+                                </div>
+                            </div>
+                            
+                            <table class="w-full mb-8">
+                                <thead>
+                                    <tr class="border-b">
+                                        <th class="text-left py-2">Description</th>
+                                        <th class="text-center py-2">Qty</th>
+                                        <th class="text-right py-2">Price</th>
+                                        <th class="text-right py-2">Total</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${invoice.items.map(item => `
+                                        <tr class="border-b">
+                                            <td class="py-2">${item.name}</td>
+                                            <td class="text-center py-2">${item.qty}</td>
+                                            <td class="text-right py-2">$${item.price.toLocaleString()}</td>
+                                            <td class="text-right py-2">$${(item.qty * item.price).toLocaleString()}</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                            
+                            <div class="flex justify-end mb-8">
+                                <div class="text-right">
+                                    <p class="mb-2">Subtotal: $${invoice.amount.toLocaleString()}</p>
+                                    <p class="mb-2">Tax (10%): $${(invoice.amount * 0.1).toLocaleString()}</p>
+                                    <p class="text-xl font-bold">Total: $${(invoice.amount * 1.1).toLocaleString()}</p>
+                                </div>
+                            </div>
+                            
+                            <div class="border-t pt-4">
+                                <p class="text-sm text-gray-600">Status: <span class="font-semibold capitalize">${invoice.status}</span></p>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-end space-x-2 mt-6 no-print">
+                            <button onclick="closeModal()" class="px-4 py-2 text-gray-600 hover:text-gray-800">Close</button>
+                            <button onclick="downloadInvoice('${invoiceId}')" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                                <i class="fas fa-download mr-2"></i>Download PDF
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.getElementById('modalContainer').innerHTML = modal;
+        }
+
+        function downloadInvoice(invoiceId) {
+            showNotification('Downloading invoice ' + invoiceId + '...', 'info');
+            // In a real application, this would generate and download a PDF
+            setTimeout(() => {
+                showNotification('Invoice downloaded successfully', 'success');
+            }, 1500);
+        }
+
+        function editInvoice(invoiceId) {
+            showNotification('Edit invoice feature coming soon', 'info');
+        }
+
+        function editInventoryItem(itemId) {
+            showNotification('Edit inventory item feature coming soon', 'info');
+        }
+
+        function editUser(userId) {
+            showNotification('Edit user feature coming soon', 'info');
+        }
+
+        function deleteUser(userId) {
+            if (confirm('Are you sure you want to delete this user?')) {
+                db.users = db.users.filter(u => u.id !== userId);
+                saveData();
+                navigateToPage('users');
+                showNotification('User deleted successfully', 'success');
+            }
+        }
+
+        function generateReport(type) {
+            showNotification(`Generating ${type} report...`, 'info');
+            setTimeout(() => {
+                showNotification(`${type.charAt(0).toUpperCase() + type.slice(1)} report generated successfully`, 'success');
+            }, 1500);
+        }
+
+        function exportReport(format) {
+            showNotification(`Exporting report as ${format.toUpperCase()}...`, 'info');
+            setTimeout(() => {
+                showNotification(`Report exported successfully`, 'success');
+            }, 1500);
+        }
+
+        function addInvoiceItem() {
+            const container = document.getElementById('invoiceItems');
+            const newItem = document.createElement('div');
+            newItem.className = 'flex gap-2';
+            newItem.innerHTML = `
+                <input type="text" placeholder="Item description" class="flex-1 px-3 py-2 border border-gray-300 rounded-lg">
+                <input type="number" placeholder="Qty" class="w-20 px-3 py-2 border border-gray-300 rounded-lg">
+                <input type="number" placeholder="Price" class="w-24 px-3 py-2 border border-gray-300 rounded-lg">
+                <button type="button" onclick="this.parentElement.remove()" class="bg-red-600 text-white px-3 py-2 rounded-lg hover:bg-red-700">
+                    <i class="fas fa-trash"></i>
+                </button>
+            `;
+            container.appendChild(newItem);
+        }
+
+        function closeModal() {
+            document.getElementById('modalContainer').innerHTML = '';
+        }
+
+        function showNotification(message, type = 'info') {
+            const colors = {
+                success: 'bg-green-500',
+                error: 'bg-red-500',
+                warning: 'bg-yellow-500',
+                info: 'bg-blue-500'
+            };
+            
+            const notification = document.createElement('div');
+            notification.className = `notification ${colors[type]} text-white px-4 py-3 rounded-lg shadow-lg flex items-center`;
+            notification.innerHTML = `
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : type === 'warning' ? 'exclamation-triangle' : 'info-circle'} mr-2"></i>
+                <span>${message}</span>
+            `;
+            
+            document.getElementById('notifications').appendChild(notification);
+            
+            setTimeout(() => {
+                notification.remove();
+            }, 3000);
+        }
+
+        function saveData() {
+            localStorage.setItem('crmData', JSON.stringify(db));
+        }
+
+        // Auto-save every 30 seconds
+        setInterval(saveData, 30000);
+    </script>
+</body>
+</html>
